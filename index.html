@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>童軍背包大師</title>
+    <title>童軍背包大師 - 限時挑戰版</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React & ReactDOM -->
@@ -15,8 +15,15 @@
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .no-select { user-select: none; -webkit-user-select: none; }
-        /* 隱藏 Canvas 元素但保留功能 */
         .hidden-canvas { display: none; }
+        
+        @keyframes pulse-red {
+            0%, 100% { color: #ffffff; border-color: #57534e; }
+            50% { color: #ef4444; border-color: #ef4444; }
+        }
+        .timer-urgent {
+            animation: pulse-red 1s infinite;
+        }
     </style>
 </head>
 <body class="bg-stone-100">
@@ -25,14 +32,13 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // --- 內建圖示組件 (解決外部載入錯誤的問題) ---
+        // --- 內建圖示組件 ---
         const Icon = ({ children, size = 24, className = "" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                 {children}
             </svg>
         );
 
-        // 定義遊戲所需的所有圖示
         const Icons = {
             Flashlight: (p) => <Icon {...p}><path d="M18 6c0 2-3 3-3 3l-6 10-4-4 10-6c0 0 1-3 3-3s3 1 3 3z"/><line x1="6" y1="12" x2="2" y2="16"/></Icon>,
             Utensils: (p) => <Icon {...p}><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></Icon>,
@@ -54,12 +60,13 @@
             Smartphone: (p) => <Icon {...p}><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></Icon>,
             Scissors: (p) => <Icon {...p}><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></Icon>,
             Moon: (p) => <Icon {...p}><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></Icon>,
+            Clock: (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>,
         };
 
         const { 
             Flashlight, Utensils, Shirt, CloudRain, ShoppingBag, Heart, RotateCcw, 
             CheckCircle, XCircle, Download, Coffee, Footprints, Battery, Pencil, 
-            Book, Pill, Droplet, Smartphone, Scissors, Moon 
+            Book, Pill, Droplet, Smartphone, Scissors, Moon, Clock
         } = Icons;
 
         // --- 遊戲資料設定 ---
@@ -102,15 +109,14 @@
 
         const MAX_HEALTH = 3;
         const ITEMS_TO_PLAY = 15;
+        const GAME_DURATION = 90; // 90 seconds
 
-        // 漫畫風格背包組件 (SVG)
         const MangaBackpack = ({ onZoneClick, onDrop, onDragOver, selectedZone, packedItems }) => {
             const getZoneStyle = (zoneId) => {
                 const isSelected = selectedZone === zoneId;
                 const hasItems = packedItems.some(i => i.zone === zoneId);
                 let baseClass = "transition-all duration-300 cursor-pointer stroke-[3px] stroke-stone-900";
                 
-                // 取消了提示功能
                 if (hasItems) return `${baseClass} fill-stone-200`;
                 return `${baseClass} fill-white hover:fill-stone-100`;
             };
@@ -202,8 +208,25 @@
             const [selectedItem, setSelectedItem] = useState(null);
             const [message, setMessage] = useState(null);
             const [studentName, setStudentName] = useState('');
+            const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
+            const [timeBonus, setTimeBonus] = useState(0);
             
             const canvasRef = useRef(null);
+            
+            // 計時器邏輯
+            useEffect(() => {
+                let timer;
+                if (gameState === 'playing' && timeLeft > 0) {
+                    timer = setInterval(() => {
+                        setTimeLeft((prev) => prev - 1);
+                    }, 1000);
+                } else if (timeLeft === 0 && gameState === 'playing') {
+                    // 時間到，遊戲結束
+                    showMessage('時間到！', 'error');
+                    setGameState('finished');
+                }
+                return () => clearInterval(timer);
+            }, [gameState, timeLeft]);
 
             const selectGameItems = () => {
                 const zones = ['lid', 'main_top', 'main_mid', 'main_bot', 'pocket'];
@@ -243,6 +266,8 @@
                 setGameState('playing');
                 setSelectedItem(null);
                 setMessage(null);
+                setTimeLeft(GAME_DURATION); // 重置時間
+                setTimeBonus(0); // 重置時間紅利
             };
 
             const handleItemClick = (item) => {
@@ -263,12 +288,21 @@
             };
 
             const handleSuccess = (item, zoneId) => {
-                setScore(prev => prev + 100);
+                const itemScore = 100;
+                setScore(prev => prev + itemScore);
+                
                 setPackedItems(prev => [...prev, item]);
-                setItems(prev => prev.filter(i => i.id !== item.id));
+                const remainingItems = items.filter(i => i.id !== item.id);
+                setItems(remainingItems);
                 setSelectedItem(null);
+                
                 showMessage('正確！', 'success');
-                if (items.length <= 1) {
+                
+                if (remainingItems.length === 0) {
+                    // 遊戲完成，計算時間紅利
+                    const bonus = timeLeft * 10;
+                    setTimeBonus(bonus);
+                    setScore(prev => prev + bonus); // 加總到總分
                     setTimeout(() => setGameState('finished'), 1000);
                 }
             };
@@ -293,7 +327,7 @@
 
             const getFeedback = () => {
                 if (health <= 0) return { title: '打包見習生', rank: 'C', color: 'text-stone-500' };
-                if (score >= (ITEMS_TO_PLAY * 100 * 0.9)) return { title: '傳說級打包王', rank: 'SS', color: 'text-yellow-600' };
+                if (score >= (ITEMS_TO_PLAY * 100 * 0.9) + 200) return { title: '傳說級打包王', rank: 'SS', color: 'text-yellow-600' };
                 if (score >= (ITEMS_TO_PLAY * 100 * 0.7)) return { title: '童軍打包大師', rank: 'S', color: 'text-red-600' };
                 if (score >= (ITEMS_TO_PLAY * 100 * 0.5)) return { title: '精英童軍', rank: 'A', color: 'text-green-600' };
                 return { title: '合格童軍', rank: 'B', color: 'text-blue-600' };
@@ -339,12 +373,17 @@
                 // Score
                 ctx.fillStyle = '#1c1917';
                 ctx.font = '32px sans-serif';
-                ctx.fillText(`於本次測驗中獲得 ${score} 分`, width / 2, 340);
+                ctx.fillText(`總分: ${score}`, width / 2, 340);
+                ctx.font = '24px sans-serif';
+                ctx.fillStyle = '#78716c';
+                if (timeBonus > 0) {
+                     ctx.fillText(`(含時間紅利 +${timeBonus})`, width / 2, 380);
+                }
                 
                 // Rank Circle
                 const feedback = getFeedback();
                 ctx.beginPath();
-                ctx.arc(width/2, 430, 60, 0, 2 * Math.PI);
+                ctx.arc(width/2, 450, 60, 0, 2 * Math.PI);
                 ctx.fillStyle = '#fef3c7'; // amber-100
                 ctx.fill();
                 ctx.lineWidth = 4;
@@ -355,13 +394,13 @@
                 ctx.font = 'bold 60px sans-serif';
                 ctx.fillStyle = '#b45309'; // amber-700
                 ctx.textBaseline = 'middle';
-                ctx.fillText(feedback.rank, width / 2, 430);
+                ctx.fillText(feedback.rank, width / 2, 450);
                 ctx.textBaseline = 'alphabetic'; // reset
 
                 // Title of Rank
                 ctx.font = 'bold 32px sans-serif';
                 ctx.fillStyle = '#78716c';
-                ctx.fillText(feedback.title, width / 2, 530);
+                ctx.fillText(feedback.title, width / 2, 550);
                 
                 // Date
                 ctx.font = '20px monospace';
@@ -394,6 +433,13 @@
                         </div>
                         {gameState === 'playing' && (
                             <div className="flex gap-3 items-center">
+                                {/* Timer Display */}
+                                <div className={`flex items-center gap-1 bg-stone-800 px-2 py-1 rounded border border-stone-600 transition-all ${timeLeft < 10 ? 'timer-urgent border-red-500' : ''}`}>
+                                    <Clock size={20} className={timeLeft < 10 ? "text-red-500" : "text-stone-400"} />
+                                    <span className={`font-mono text-xl leading-none ${timeLeft < 10 ? "text-red-500" : "text-white"}`}>
+                                        {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                                    </span>
+                                </div>
                                 <div className="flex items-center gap-1 bg-stone-800 px-2 py-1 rounded border border-stone-600">
                                     <span className="font-mono text-xl text-yellow-400 leading-none">{score}</span>
                                 </div>
@@ -423,8 +469,8 @@
                                 <div className="bg-white border-4 border-stone-900 p-6 max-w-sm w-full shadow-[8px_8px_0px_0px_rgba(28,25,23,1)]">
                                     <h2 className="text-3xl font-black mb-4 text-stone-900 uppercase italic">Mission Start</h2>
                                     <div className="space-y-3 mb-6 text-base font-bold text-stone-600">
+                                        <p className="flex items-center gap-2"><Clock size={18} className="text-blue-600"/> 限時 90 秒挑戰</p>
                                         <p className="flex items-center gap-2"><CheckCircle size={18} className="text-green-600"/> 整理 15 項隨機裝備</p>
-                                        <p className="flex items-center gap-2"><CheckCircle size={18} className="text-green-600"/> 無提示，考驗記憶</p>
                                         <p className="flex items-center gap-2"><XCircle size={18} className="text-red-600"/> 錯誤三次淘汰</p>
                                     </div>
                                     <input type="text" placeholder="輸入你的名字" className="w-full p-3 border-4 border-stone-900 bg-stone-50 font-bold mb-4 focus:outline-none focus:border-yellow-500" value={studentName} onChange={(e) => setStudentName(e.target.value)} />
@@ -464,11 +510,31 @@
                                     <h2 className="text-4xl font-black text-stone-900 uppercase italic mb-2">Result</h2>
                                     <div className="my-6 space-y-4">
                                         <div className="text-xl font-bold">學員 <span className="underline decoration-4 decoration-yellow-400">{studentName}</span></div>
-                                        <div className="flex justify-center gap-4">
-                                            <div className="bg-stone-100 p-3 w-1/2 border-2 border-stone-800"><div className="text-xs font-bold text-stone-500">SCORE</div><div className="text-3xl font-black text-stone-900">{score}</div></div>
-                                            <div className="bg-stone-100 p-3 w-1/2 border-2 border-stone-800"><div className="text-xs font-bold text-stone-500">RANK</div><div className={`text-3xl font-black ${getFeedback().color}`}>{getFeedback().rank}</div></div>
+                                        
+                                        {/* Score Display Breakdown */}
+                                        <div className="flex flex-col gap-2">
+                                             <div className="flex justify-between px-4 text-sm font-bold text-stone-500">
+                                                <span>基礎得分:</span>
+                                                <span>{score - timeBonus}</span>
+                                             </div>
+                                             {timeBonus > 0 && (
+                                                <div className="flex justify-between px-4 text-sm font-bold text-green-600">
+                                                    <span>時間紅利:</span>
+                                                    <span>+{timeBonus}</span>
+                                                </div>
+                                             )}
+                                             <div className="border-t-2 border-stone-200 my-1"></div>
+                                             <div className="flex justify-between px-4 text-xl font-black text-stone-900">
+                                                <span>總分:</span>
+                                                <span>{score}</span>
+                                             </div>
                                         </div>
-                                        <div className="text-lg font-bold text-stone-600 mt-2">{getFeedback().title}</div>
+
+                                        <div className="bg-stone-100 p-3 mx-4 border-2 border-stone-800 mt-2">
+                                            <div className="text-xs font-bold text-stone-500">RANK</div>
+                                            <div className={`text-3xl font-black ${getFeedback().color}`}>{getFeedback().rank}</div>
+                                            <div className="text-sm font-bold text-stone-600 mt-1">{getFeedback().title}</div>
+                                        </div>
                                     </div>
                                     <div className="flex gap-3 mt-8">
                                         <button onClick={startGame} className="flex-1 bg-white border-4 border-stone-900 py-3 font-bold hover:bg-stone-200 flex items-center justify-center gap-2"><RotateCcw size={20} /> 重來</button>
